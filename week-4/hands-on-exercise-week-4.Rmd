@@ -1,0 +1,441 @@
+
+## COS-D407. *Scientific Modeling and Model Validation*    
+   
+#### Hands-on excercises 
+
+#### Week 4
+  
+#### University of Helsinki, Finland 
+
+#### 26.10.2020--09.12.2020    
+   
+#### Lecturer: Christina Bohk-Ewald  
+      
+##### Source: https://github.com/christina-bohk-ewald/2020-COS-D407-scientific-modeling-and-model-validation
+  
+####  
+  
+\pagebreak  
+  
+## Table of content:  
+   
+#### 1. Some preparations in R  
+  
+#### 2. Download, load, and prepare required input data  
+  
+#### 3. Analyze and compare IFR estimates from different sources    
+   
+#### 4. Estimate COVID-19 infections in Finland based on different IFR estimates 
+    
+#### 5. Time for you to think both creatively and critically about the meaning of these results
+  
+####  
+  
+\pagebreak
+  
+---  
+author:
+  Christina Bohk-Ewald  
+output: pdf_document
+params:  
+  date: "`r Sys.time()`"  
+  printcode: TRUE  
+---  
+  
+```{r, setup, include=FALSE}  
+# set this option in the first code chunk in the document  
+knitr::opts_chunk$set(echo = params$printcode)  
+```  
+
+## 1. Some preparations in R
+
+### 1.1 Open a new script for week 4 in R (e.g., *week-4.R*) and save it to a folder of your choice (e.g., *course-COS-D407*).    
+  
+### 1.2 Create a filepath to this folder from where you would like to load data and to where you would like to save your outcome. For example,
+
+```{r include=TRUE, message=FALSE,warning=FALSE, eval=FALSE}  
+the.course-COS-D407.path <- c("C:/course-COS-D407")  
+```  
+
+### 1.3 You can then set the working directory to this path  
+  
+```{r include=TRUE, message=FALSE,warning=FALSE,eval=FALSE}  
+setwd(the.course-COS-D407.path)   
+```    
+  
+## 2. Download, load, and prepare required input data   
+  
+In week 4 we analyze the robustness of the demographic scaling model's COVID-19 infection estimates for Finland with respect to IFR estimates. We will start with reading and comparing infection fatality rate estimates from different sources, continue with estimating COVID-19 infection estimates for Finland with the demographic scaling model based on these different IFR estimates, and finally compare the resulting COVID-19 infection estimates in order to analyze the impact of these different IFR estimates.  
+  
+Note that you know already the steps 2.1 through 2.5 from the previous lab session, steps 2.6 and 2.7 are new.
+  
+### 2.1 Download confirmed cases and reported deaths attributable to COVID-19 as of today  
+  
+Please go to the website of the [Johns Hopkins University CSSE](https://data.humdata.org/dataset/novel-coronavirus-2019-ncov-cases). The files  
+  
+- *time_series_covid19_confirmed_global.csv* 
+- *time_series_covid19_deaths_global.csv* 
+
+contain confirmed cases and reported deaths, respectively, for many countries on a daily basis since January 22, 2020. Please download these two files and save them in your project folder.       
+    
+### 2.2 Load COVID-19 data  
+
+Please load the numbers of confirmed cases and reported deaths from COVID-19 in R using the function *read.csv* of the R-package *openxlsx*.  
+  
+```{r include=TRUE, message=FALSE,warning=FALSE}  
+require(openxlsx)
+
+confirmed <- read.csv("time_series_covid19_confirmed_global.csv",header=TRUE, 
+stringsAsFactors = FALSE)
+confirmed[1:2,1:6]
+
+deaths <- read.csv("time_series_covid19_deaths_global.csv",header=TRUE, 
+stringsAsFactors = FALSE)
+deaths[1:2,((ncol(deaths)-5):ncol(deaths))]
+
+```  
+  
+### 2.3 Download and load abridged life tables
+
+Please go to the [UNWPP2019 website](https://population.un.org/wpp/), [download abridged life tables for both sexes together](https://population.un.org/wpp/Download/Files/1_Indicators%20(Standard)/EXCEL_FILES/3_Mortality/WPP2019_MORT_F17_1_ABRIDGED_LIFE_TABLE_BOTH_SEXES.xlsx), save them into your project folder, and then load them into R. 
+
+```{r include=TRUE, message=FALSE, warning=FALSE, eval=TRUE} 
+  
+lt_1950_2020 <- read.xlsx("WPP2019_MORT_F17_1_ABRIDGED_LIFE_TABLE_BOTH_SEXES.xlsx",
+sheet = 1,startRow = 17)
+  
+``` 
+
+Brief data description. The data object *lt_1950_2020* contains abridged life tables for both sexes for all UN countries.  
+  
+Explore this data object and find out how large Finnish remaining life expectancy at birth has been 1950-55 through 2015-19.  
+  
+```{r include=TRUE, message=FALSE, warning=FALSE, eval=TRUE} 
+  
+## lt_1950_2020[1:2,]  
+  
+colnames(lt_1950_2020)  
+  
+lt_1950_2020[which(lt_1950_2020[,"Region,.subregion,.country.or.area.*"]=="Finland" & 
+  lt_1950_2020["Age.(x)"]==0),c("Period","Expectation.of.life.e(x)")]
+  
+```   
+    
+### 2.4 Load global pattern over age of COVID-19 deaths
+
+[Dudel et al. (2020)](https://doi.org/10.1371/journal.pone.0238904) provide data on age-specific death counts attributable to COVID-19 in their supplementary material. These data have served as a basis for calculating a global average pattern over age for total death counts as input for the demographic scaling model. You can download this *global average pattern over age* from the [GitHub repository for this course](https://github.com/christina-bohk-ewald/2020-COS-D407-scientific-modeling-and-model-validation).     
+  
+```{r include=TRUE, message=FALSE, warning=FALSE, eval=TRUE} 
+
+global_age_dist_deaths <- source("global_age_dist_deaths.R")
+## global_age_dist_deaths
+  
+``` 
+
+Brief data description. The data object *global_age_dist_deaths* contains the global pattern over 10-year age groups of COVID-19 deaths.
+  
+### 2.5 Load infection fatality rates from Verity et al. (2020)
+
+[Verity and colleagues (2020)](https://doi.org/10.1016/S1473-3099(20)30243-7) report infection fatality rates by 10-year age groups for Hubei province, China, on page 5. Please create a data object *ifr_by_age_china_verity* that contains these data or download it from the [GitHub repository for this course](https://github.com/christina-bohk-ewald/2020-COS-D407-scientific-modeling-and-model-validation).
+  
+```{r include=TRUE, message=FALSE, warning=FALSE, eval=TRUE} 
+
+ifr_by_age_china_verity <- read.table("infection-fatality-rates-by-age-china-Verity.txt",
+header=FALSE, stringsAsFactors = FALSE)
+
+ifr_by_age_china_verity
+  
+``` 
+  
+Brief data description. The data object *ifr_by_age_china_verity* contains the modal estimate as well as the lower and upper bound of the 95 percent credible interval of the infection fatality rates of Hubei province, China, by 10-year age groups.   
+  
+### 2.6 Load infection fatality rates from Salje et al. (2020)
+
+[Salje and colleagues (2020)](https://science.sciencemag.org/content/369/6500/208) report infection fatality rates by 10-year age groups for France. Please create a data object *ifr_by_age_france_salje* that contains these data or download it from the [GitHub repository for this course](https://github.com/christina-bohk-ewald/2020-COS-D407-scientific-modeling-and-model-validation).
+  
+```{r include=TRUE, message=FALSE, warning=FALSE, eval=TRUE} 
+
+ifr_by_age_france_salje <- read.table("infection-fatality-rates-by-age-france-Salje.txt",
+header=FALSE, stringsAsFactors = FALSE)
+
+ifr_by_age_france_salje <- ifr_by_age_france_salje/100  
+  
+ifr_by_age_france_salje
+  
+``` 
+  
+Brief data description. The data object *ifr_by_age_france_salje* contains the modal estimate as well as the lower and upper bound of the 95 percent credible interval of the infection fatality rates of France by 10-year age groups.  
+      
+### 2.7 Infection fatality rates from Levin et al. (2020)
+
+[Levin and colleagues (2020)](https://www.medrxiv.org/content/10.1101/2020.07.23.20160895v6) propose an exponential model function to determine infection fatality rates by single years of age. Please create a data object *ifr_by_age_levin* that contains these data for 10-year age groups.
+  
+```{r include=TRUE, message=FALSE, warning=FALSE, eval=TRUE} 
+
+ifr_by_age_levin <- c(0)
+current_ifr_sum <- c(0)
+exp_IFR <- exp(-7.53 + 0.119 * (seq(0.5,90.5,1))) / 100
+for(group in 1:8){
+	pos <- (1+10*(group-1)):(10+10*(group-1))
+	current_ifr_sum[group] <- sum(exp_IFR[pos])
+	ifr_by_age_levin[group] <- current_ifr_sum[group]/10
+} ## group
+current_ifr_sum[9] <- sum((exp_IFR[(pos[length(pos)]+1):(length(exp_IFR))]))
+ifr_by_age_levin[9] <- current_ifr_sum[9]/length((pos[length(pos)]+1):(length(exp_IFR)))
+
+round(ifr_by_age_levin,5)
+   
+``` 
+  
+Brief data description. The data object *ifr_by_age_levin* contains the central estimate of infection fatality rates by 10-year age groups.   
+  
+## 3. Analyze and compare IFR estimates from different sources  
+  
+### 3.1. Visualize original IFR estimates from different sources  
+  
+An easy way to compare the IFR estimates from Verity et al. (2020), Salje et al. (2020), and Levin et al. (2020), is to plot them:  
+  
+```{r fig.pos="h", fig.height=7, fig.width=7, fig.align="center", include=TRUE, message=FALSE, warning=FALSE}   
+
+par(fig = c(0,1,0,1), las=1, mai=c(0.8,0.8,0.8,0.4))
+
+plot(x=-100,y=-100,xlim=c(0,90),ylim=c(0,0.2),xlab="Chronological age",ylab="",
+	main="Infection fatality rates\n based on different sources",axes=FALSE)
+
+axis(side=1,at=seq(0,90,5),labels=FALSE,lwd=1,pos=0)
+axis(side=1,at=seq(0,90,10),labels=TRUE,lwd=3,pos=0)
+axis(side=2,at=seq(0,0.2,0.05),labels=TRUE,lwd=3,pos=0)
+
+lines(0:89,rep(ifr_by_age_china_verity[,2],each=10),col="black",lwd=2)
+lines(0:89,rep(ifr_by_age_france_salje[,2],each=10),col="blue",lwd=2)
+lines(0:89,rep(ifr_by_age_levin,each=10),col="red",lwd=2)
+	
+legend(0,0.2,c("Verity et al. (Hubei, China)","Salje et al. (France)",
+"Levin et al. (universal exponential function)"),col=c("black","blue","red"),
+bty="n",lwd=2,lty=1,cex=0.9)
+  
+```  
+  
+Please describe and compare the IFR estimates of Verity et al. (2020), Salje et al. (2020), and Levin et al. (2020). What IFR estimates are particularly low in younger ages, and what IFR estimates are particularly large in older ages?  
+  
+What do you think about these IFR estimates? How plausible are they?  
+    
+### 3.2 Scale original IFR estimates from a reference country onto a country of interest 
+  
+You can now scale the original IFR estimates of Verity et al. (2020) and Salje et al. (2020) to better match the context in Finland with respect to age structure, preconditions, and medical services, adopting the scaling procedure based on remining life expectancy of the demographic scaling model.  
+  
+#### 3.2.1 Source basic functions of the demographic scaling model
+
+You can find the basic functions of the demographic scaling model in the file *basic-functions-week-4.R* in the [GitHub repository for this course](https://github.com/christina-bohk-ewald/2020-COS-D407-scientific-modeling-and-model-validation). They contain the functions:   
+
+- *to_ungroup* and *to_ungroup_spar* to interpolate IFR estimates of Verity et al. (2020) and Salje et al. (2020) into single years of age
+- *get_ungrouped_ex_2015_2020* to ungroup remaining life expectancy
+- *map_ifr_betw_ref_and_one_coi_thanatAge* and *map_ifr_betw_assigned_ref_and_one_coi_thanatAge* to scale IFRs from a reference country (here: China; France) onto a country of interest (here: Finland) based on remaining life expectancy
+- *aggregate_mapped_ifr_10y* to aggregate scaled IFRs into 10-year age groups
+- *disaggregate_deaths_one_coi_10y* to disaggregate total deaths into 10-year age  
+
+You may have a look at these basic functions if you wish. But it is also fine to just source (or load) them via the file *basic-functions-week-3.R*:
+
+```{r include=TRUE, message=FALSE, warning=FALSE, eval=TRUE} 
+
+source("basic-functions-week-4.R")  
+
+```  
+  
+#### 3.2.2 Scale original IFR estimates of Verity et al. (2020) and Salje et al. (2020) for Finland  
+  
+You can scale the original IFR estimates based on remaining life expectancy following the corresponding steps of the demograhic scaling model:  
+  
+```{r include=TRUE, message=FALSE, warning=FALSE, eval=TRUE} 
+
+#
+## 1. Ungroup original IFR estimates:
+#
+
+ungrouped_mode_ifr_by_single_age_china_sp <- to_ungroup(to_ungroup=
+		ifr_by_age_china_verity[,2],nr_grouped_years=10)
+
+ungrouped_mode_ifr_by_single_age_france_sp <- to_ungroup_spar(to_ungroup=
+		ifr_by_age_france_salje[,2],spar=0.195,nr_grouped_years=10)
+
+#
+## 2. Scale original IFRs onto a COI (here: Finland) via remaining life expectancy:
+#
+
+mapped_mode_ifr_thanatAge_verity <- map_ifr_betw_ref_and_one_coi_thanatAge(coi="Finland",
+	lt_1950_2020=lt_1950_2020,
+	ungrouped_ifr_by_single_age_china_sp=ungrouped_mode_ifr_by_single_age_china_sp)
+
+mapped_mode_ifr_thanatAge_salje <- map_ifr_betw_assigned_ref_and_one_coi_thanatAge(ref="France",
+	coi="Finland",deaths=deaths,lt_1950_2020=lt_1950_2020,
+	ungrouped_ifr_by_single_age_china_sp=ungrouped_mode_ifr_by_single_age_france_sp)
+
+## and fill in the few NA values:
+
+pos_na <- which(is.na(mapped_mode_ifr_thanatAge_verity[1,]))
+	if(length(pos_na)>0){
+		for(pos in 1:length(pos_na)){
+			if(pos_na[pos] < 6){
+				mapped_mode_ifr_thanatAge_verity[1,pos_na[pos]] <- 
+					min(mapped_mode_ifr_thanatAge_verity[1,],na.rm=TRUE)
+			}
+			if(pos_na[pos] >= 6){
+				mapped_mode_ifr_thanatAge_verity[1,pos_na[pos]] <- 
+					mapped_mode_ifr_thanatAge_verity[1,pos_na[pos]-1]
+			}
+		} ## for pos
+	} ## if
+
+pos_na <- which(is.na(mapped_mode_ifr_thanatAge_salje[1,]))
+	if(length(pos_na)>0){
+		for(pos in 1:length(pos_na)){
+			if(pos_na[pos] < 6){
+				mapped_mode_ifr_thanatAge_salje[1,pos_na[pos]] <- 
+					min(mapped_mode_ifr_thanatAge_salje[1,],na.rm=TRUE)
+			}
+			if(pos_na[pos] >= 6){
+				mapped_mode_ifr_thanatAge_salje[1,pos_na[pos]] <- 
+					mapped_mode_ifr_thanatAge_salje[1,pos_na[pos]-1]
+			}
+		} ## for pos
+	} ## if
+
+#
+## 3. Put scaled IFRs into 10-year age groups: 
+#
+
+mapped_mode_ifr_thanatAge_verity_10y <- aggregate_mapped_ifr_10y(disaggregated_mapped_ifr=
+						mapped_mode_ifr_thanatAge_verity)
+
+mapped_mode_ifr_thanatAge_salje_10y <- aggregate_mapped_ifr_10y(disaggregated_mapped_ifr=
+						mapped_mode_ifr_thanatAge_salje)
+
+```  
+  
+#### 3.2.3 Visualize original and scaled IFR estimates from different sources  
+  
+You can now depict the original IFR estimates from different sources and compare them with the scaled IFR estimates for Finland:  
+        
+```{r fig.pos="h", fig.height=7, fig.width=7, fig.align="center", include=TRUE, message=FALSE, warning=FALSE}   
+
+par(fig = c(0,1,0,1), las=1, mai=c(0.8,0.8,0.8,0.4))
+
+plot(x=-100,y=-100,xlim=c(0,90),ylim=c(0,0.2),xlab="Chronological age",ylab="",
+	main="Original and scaled infection fatality rates\n based on different sources",
+	axes=FALSE)
+
+axis(side=1,at=seq(0,90,5),labels=FALSE,lwd=1,pos=0)
+axis(side=1,at=seq(0,90,10),labels=TRUE,lwd=3,pos=0)
+axis(side=2,at=seq(0,0.2,0.05),labels=TRUE,lwd=3,pos=0)
+
+lines(0:89,rep(ifr_by_age_china_verity[,2],each=10),col="black",lwd=2)
+lines(0:89,rep(mapped_mode_ifr_thanatAge_verity_10y,each=10),col="black",lty=2,lwd=2)
+
+lines(0:89,rep(ifr_by_age_france_salje[,2],each=10),col="blue",lwd=2)
+lines(0:89,rep(mapped_mode_ifr_thanatAge_salje_10y,each=10),col="blue",lty=2,lwd=2)
+
+lines(0:89,rep(ifr_by_age_levin,each=10),col="red",lwd=2)
+	
+legend(0,0.2,c("Verity et al. (Hubei, China)",
+"Scaled IFR of Verity et al. (China -> Finland)",
+"Salje et al. (France)","Scaled IFR of Salje et al. (France -> Finland)",
+"Levin et al. (universal exponential function)"),
+col=c("black","black","blue","blue","red"),
+bty="n",lwd=2,lty=c(1,2,1,2,1),cex=0.9)
+  
+```  
+  
+Please describe and compare the original and scaled IFR estimates (for Finland). How do you explain the differences between original and scaled IFRs: China $\rightarrow$ Finland and France $\rightarrow$ Finland?    
+  
+## 4. Estimate COVID-19 infections in Finland based on different IFR estimates 
+    
+You can now estimate the COVID-19 infections in Finland over time based on these different IFR estimates, following the steps of the demographic scaling model.  
+   
+```{r include=TRUE, message=FALSE, warning=FALSE, eval=TRUE} 
+
+#
+## 1. Disaggregate total COVID-19-related deaths into 10-year age groups:
+#
+
+deaths_by_age <- disaggregate_deaths_one_coi_10y(coi="Finland")
+	
+#
+## 2. Estimate COVID-19 infections over time:
+#
+
+inf_mode_scaled_verity <- colSums( deaths_by_age / mapped_mode_ifr_thanatAge_verity_10y ) 
+inf_mode_scaled_salje <- colSums( deaths_by_age / mapped_mode_ifr_thanatAge_salje_10y ) 
+inf_mode_levin <- colSums( deaths_by_age / ifr_by_age_levin ) 
+inf_mode_verity <- colSums( deaths_by_age / ifr_by_age_china_verity[,2] ) 
+inf_mode_salje <- colSums( deaths_by_age / ifr_by_age_france_salje[,2] )  
+  
+```  
+  
+The data objects *inf_mode_levin*, *inf_mode_verity*, and *inf_mode_salje* contain the COVID-19 infection for Finland estimates based on the central estimates of the original IFR estimates of Levin et al., Verity et al., and Salje et al., respectively. The data objects *inf_mode_scaled_verity* and *inf_mode_scaled_salje* contain the COVID-19 infection estimates for Finland based on the scaled central estimates of the IFR for China and France, respectively.  
+  
+You can now visualize the numbers of COVID-19 infections in Finland over time, based on different IFR estimates. When comparing these Finnish COVID-19 estimates with the numbers of confirmed cases, it is a good idea to also account for an average time to death of approximately 18 days.  
+    
+```{r include=TRUE, message=FALSE, warning=FALSE, eval=TRUE} 
+  
+dates <- seq(as.Date("22/01/2020", format = "%d/%m/%Y"),
+by = "days", length = (ncol(deaths)-4) )  
+  
+```  
+
+    
+```{r fig.pos="h", fig.height=7, fig.width=10, fig.align="center", include=TRUE, message=FALSE, warning=FALSE}   
+  
+par(fig = c(0,1,0,1), las=1, mai=c(0.4,0.8,0.8,0.4))
+
+plot(x=-100,y=-100,xlim=c(0,length(5:ncol(deaths))),ylim=c(0,30),xlab="Date",ylab="",
+cex.main=0.9,main="Total numbers of COVID-19 infections, in thousand, in Finland",axes=FALSE)
+
+segments(x0=rep(0,4),x1=rep(length(5:ncol(deaths)),4),y0=seq(5,30,5),y1=seq(5,30,5),
+lty=2,col=grey(0.8))
+
+lines(x=1:length(5:ncol(deaths)),y=c(inf_mode_scaled_verity[-c(1:18)],rep(NA,18))/1000,
+col="black",lty=2,lwd=3)
+lines(x=1:length(5:ncol(deaths)),y=c(inf_mode_verity[-c(1:18)],rep(NA,18))/1000,
+col="black",lty=1,lwd=3)
+
+lines(x=1:length(5:ncol(deaths)),y=c(inf_mode_scaled_salje[-c(1:18)],rep(NA,18))/1000,
+col="blue",lty=2,lwd=3)
+lines(x=1:length(5:ncol(deaths)),y=c(inf_mode_salje[-c(1:18)],rep(NA,18))/1000,
+col="blue",lty=1,lwd=3)
+
+lines(x=1:length(5:ncol(deaths)),y=c(inf_mode_levin[-c(1:18)],rep(NA,18))/1000,
+col="red",lty=1,lwd=3)
+
+
+lines(x=1:length(5:ncol(deaths)),y=confirmed[which(confirmed[,"Country.Region"]=="Finland"),
+5:ncol(confirmed)]/1000,col=gray(0.7),lty=2,lwd=3)
+
+legend(0,31.5,c("Verity et al. (Hubei, China)",
+"Scaled IFR of Verity et al. (China -> Finland)",
+"Salje et al. (France)","Scaled IFR of Salje et al. (France -> Finland)",
+"Levin et al. (universal exponential function)",
+"Confirmed"),
+col=c("black","black","blue","blue","red",gray(0.7)),
+bty="n",lwd=2,lty=c(1,2,1,2,1,2),cex=0.9)
+
+axis(side=1,at=seq(1,length(5:ncol(deaths)),7),labels=FALSE,lwd=1,pos=0)
+
+axis(side=1,at=c(seq(1,length(5:ncol(deaths)),21),length(5:ncol(deaths))),
+labels=dates[c(seq(1,length(5:ncol(deaths)),21),
+length(5:ncol(deaths)))],lwd=3,pos=0)
+
+axis(side=2,at=seq(0,30,1),labels=FALSE,lwd=1,pos=0)
+
+axis(side=2,at=seq(0,30,5),labels=TRUE,lwd=3,pos=0)
+  
+```  
+
+Please describe and compare the level and the temporal development of these estimated numbers of COVID-19 infections in Finland. Please also compare them to (1) the numbers of confirmed cases in Finland and, perhaps, to (2) the corresponding figures in other countries. 
+
+Please think about how you could extend this R-code in order to estimate the total numbers of COVID-19 infections for other countries and how to provide uncertainty estimates for them.  
+  
+## 4. Time for you to think both creatively and critically about the robustness of the COVID-19 infection estimates with respect to the infection fatality rate in general and for Finland in particular. How robust are they?
+     
+
+
+ 
