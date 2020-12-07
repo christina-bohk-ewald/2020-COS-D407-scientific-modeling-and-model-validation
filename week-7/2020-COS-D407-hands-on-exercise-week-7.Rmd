@@ -1,0 +1,272 @@
+
+## COS-D407. *Scientific Modeling and Model Validation*    
+   
+#### Hands-on excercises 
+
+#### Week 7
+  
+#### University of Helsinki, Finland 
+
+#### 26.10.2020--09.12.2020    
+   
+#### Lecturer: Christina Bohk-Ewald  
+      
+##### Source: https://github.com/christina-bohk-ewald/2020-COS-D407-scientific-modeling-and-model-validation
+  
+####  
+  
+\pagebreak  
+  
+## Table of content:  
+   
+#### 1. Some preparations in R  
+  
+#### 2. Load raw data of IFR by age of Levin et al. (2020)    
+
+#### 3. Find suitable model for predicting IFR by age based on training data and testing data  
+  
+#### 4. Time for you to think both creatively and critically about selecting the most suitable method  
+  
+####  
+  
+\pagebreak
+  
+---  
+author:
+  Christina Bohk-Ewald  
+output: pdf_document
+params:  
+  date: "`r Sys.time()`"  
+  printcode: TRUE  
+---  
+  
+```{r, setup, include=FALSE}  
+# set this option in the first code chunk in the document  
+knitr::opts_chunk$set(echo = params$printcode)  
+``` 
+
+## 1. Some preparations in R
+
+### 1.1 Open a new script for week 6 in R (e.g., *week-6.R*) and save it to a folder of your choice (e.g., *course-COS-D407*).    
+  
+### 1.2 Create a filepath to this folder from where you would like to load data and to where you would like to save your outcome. For example,
+
+```{r include=TRUE, message=FALSE,warning=FALSE, eval=FALSE}  
+the.course-COS-D407.path <- c("C:/course-COS-D407")  
+```  
+
+### 1.3 You can then set the working directory to this path  
+  
+```{r include=TRUE, message=FALSE,warning=FALSE,eval=FALSE}  
+setwd(the.course-COS-D407.path)   
+```    
+
+## 2. Load raw data of IFR by age of Levin et al. (2020)    
+
+Levin and colleagues (2020) have introduced an exponential model for predicting IFR, in %, by age. As they provide the raw data, you can test how suitable this exponential model (and other models) are to predict IFR by age.      
+  
+Please go to the preprint of Levin et al. (2020) on medRxiv and download the [Supplementary Data Spreadsheets](https://www.medrxiv.org/highwire/filestream/98266/field_highwire_adjunct_files/0/2020.07.23.20160895-1.xlsx). You can save this file in your course folder and load the respective data in R:    
+  
+```{r include=TRUE, message=FALSE, warning=FALSE, eval=TRUE} 
+  
+require(openxlsx)
+
+## Representative sample:
+
+levin_ifr_rs <- read.xlsx("LevinEtAl2020-spreadsheet.xlsx",sheet = 2,startRow = 1)
+levin_ifr_rs[1:2,]
+
+## Convenience sample:
+
+levin_ifr_cs <- read.xlsx("LevinEtAl2020-spreadsheet.xlsx",sheet = 3,startRow = 1)
+levin_ifr_cs[1:2,]
+
+## Comprehensive tracing:
+
+levin_ifr_ct <- read.xlsx("LevinEtAl2020-spreadsheet.xlsx",sheet = 4,startRow = 1)
+levin_ifr_ct[1:2,]
+
+```  
+
+Brief data description. The data objects *levin_ifr_rs*, *levin_ifr_cs*, and *levin_ifr_ct* contain IFR estimates (in%) in column 7 by median age in column 2.  
+  
+## 3. Find suitable model for predicting IFR by age based on training data and testing data
+
+Remember that it might not be so much about finding the model that fits best to *all* raw data, but rather about finding the model that predicts best values of the IFR by age the model has not seen yet (machine learning; generalization of underlying pattern). That is why we split *all* raw data into training data and testing data in order to find the model that predicts best IFR by age. Following this approach, we use the training data to fit the models and we use the testing data to test how well the models predict IFR by age in a *new* environment.  
+  
+### 3.1 Validation set approach  
+
+Please see the hands-on exercise for week 6.  
+  
+### 3.2 k-fold cross validation
+  
+According to the k-fold cross validation, you randomly split *all* raw data into k parts of roughly equal size. 
+
+Repeating the procedure k times, you use each of these k parts once as testing data and the rest of the data as training data. You then fit the six models to the training data before you compare their IFR predictions with the actual IFR values of the testing data using the MSE. 
+  
+Below you apply a 10-fold cross validation:  
+  
+```{r include=TRUE, message=TRUE, warning=FALSE, eval=TRUE} 
+
+train_MSE <- matrix(NA,nr=6,nc=10)
+test_MSE <- matrix(NA,nr=6,nc=10)
+
+for(run in 1:10){
+
+	## Random order for using raw data as testing data:
+
+	set.seed(1)
+	test_order <- sample(length(levin_ifr),length(levin_ifr))
+	unique(test_order)
+
+	## Determine 10 folds (of equal size) for cross-validation:
+
+	cv_start <- seq(1,length(levin_ifr),round(length(levin_ifr)/10,0))
+	cv_end <- seq(round(length(levin_ifr)/10,0),length(levin_ifr),round(length(levin_ifr)/10,0))
+
+	test <- test_order[cv_start[run]:cv_end[run]] 
+	train <- c(1:length(levin_ifr))[-test]
+
+	## sort(train)
+	## sort(test)
+
+	train_levin_ifr <- levin_ifr[train] 
+	train_levin_age <- levin_age[train]
+	test_levin_ifr <- levin_ifr[test] 
+	test_levin_age <- levin_age[test]
+
+	## Fit models to training data
+
+	model_1 <- lm(train_levin_ifr~train_levin_age)
+	model_2 <- lm(train_levin_ifr~I(train_levin_age^2))
+	model_3 <- lm(train_levin_ifr~I(train_levin_age^3))
+	model_4 <- lm(train_levin_ifr~I(train_levin_age^4))
+	model_5 <- lm(log(train_levin_ifr,base=exp(1))~train_levin_age,
+subset=train_levin_ifr>0)
+
+	model_6 <- lm(log(train_levin_ifr,base=exp(1))~I(train_levin_age^2), 
+subset=train_levin_ifr>0)
+
+	## Calculate and save train MSE
+
+	train_MSE[1,run] <- mean((train_levin_ifr - 
+predict(model_1,data.frame(train_levin_age=train_levin_age)))^2)
+
+	train_MSE[2,run] <- mean((train_levin_ifr - 
+predict(model_2,data.frame(train_levin_age=train_levin_age)))^2)
+
+	train_MSE[3,run] <- mean((train_levin_ifr - 
+predict(model_3,data.frame(train_levin_age=train_levin_age)))^2)
+
+	train_MSE[4,run] <- mean((train_levin_ifr - 
+predict(model_4,data.frame(train_levin_age=train_levin_age)))^2)
+
+	train_MSE[5,run] <- mean((train_levin_ifr - 
+exp(predict(model_5,data.frame(train_levin_age=train_levin_age))))^2)
+
+	train_MSE[6,run] <- mean((train_levin_ifr - 
+exp(predict(model_6,data.frame(train_levin_age=train_levin_age))))^2)
+	
+	## Apply fitted models to testing data and calculate and save test MSE 
+
+	test_MSE[1,run] <- mean((test_levin_ifr - 
+predict(model_1,data.frame(train_levin_age=test_levin_age)))^2)
+
+	test_MSE[2,run] <- mean((test_levin_ifr - 
+predict(model_2,data.frame(train_levin_age=test_levin_age)))^2)
+
+	test_MSE[3,run] <- mean((test_levin_ifr - 
+predict(model_3,data.frame(train_levin_age=test_levin_age)))^2)
+
+	test_MSE[4,run] <- mean((test_levin_ifr - 
+predict(model_4,data.frame(train_levin_age=test_levin_age)))^2)
+
+	test_MSE[5,run] <- mean((test_levin_ifr - 
+exp(predict(model_5,data.frame(train_levin_age=test_levin_age))))^2)
+
+	test_MSE[6,run] <- mean((test_levin_ifr - 
+exp(predict(model_6,data.frame(train_levin_age=test_levin_age))))^2)
+
+} ## for run
+
+```  
+
+The R-code above applies the 10-fold cross validation (run 1 through ten in the for loop). The data objects *train_MSE* and *test_MSE* contain the MSE for each of the six models (rows) in each of the 10 runs (columns) when applied to the training data and the testing data, respectively.  
+  
+These data allow you to eventually compute the average train MSE and the average test MSE across all ten runs for each of the six models:  
+  
+```{r include=TRUE, message=FALSE, warning=FALSE, eval=TRUE} 
+
+rowMeans(train_MSE)
+rowMeans(test_MSE)
+
+```  
+
+Which model has the smallest / largest testing MSE? Which model has the smallest / largest training MSE? You can also plot your findings:   
+  
+```{r fig.pos="h", fig.height=7, fig.width=10, fig.align="center", include=TRUE, message=FALSE, warning=FALSE}   
+
+par(fig = c(0,1,0,1), las=1, mai=c(1.4,0.8,0.8,0.4))
+
+plot(1:6,rowMeans(train_MSE),main="MSE based on 10-fold cross validation",
+col=c("black","red","forestgreen","magenta","blue","turquoise"),pch=19,cex=2,
+xlab="Model type",ylab="",ylim=c(0,150))
+
+points(1:6,rowMeans(test_MSE),
+col=c("black","red","forestgreen","magenta","blue","turquoise"),pch=15,cex=2)
+
+for(model in 1:6){
+	points(x=rep(model,10),y=test_MSE[model,],
+col=c("black","red","forestgreen","magenta","blue","turquoise")[model],pch=15,cex=1)
+}
+
+lines(1:6,rep(min(test_MSE),6),col="orange",lty=2,lwd=2)
+
+legend(1,150, c("Model 1: Linear model","Model 2: Age term order 2",
+"Model 3: Age term order 3","Model 4: Age term order 4",
+"Model 5: Exponential IFR","Model 6: Exponential IFR and age term order 2"), 
+col=c("black","red","forestgreen","magenta","blue","turquoise"),
+pch=rep(19,6),lty=NA,lwd=2,bty="n")
+
+legend(1,100,col=c("black","black"),c("test_MSE","train_MSE"),
+lty=NA,pch=c(15,19),lwd=2,bty="n")
+
+legend(1,80,col=c("orange"),c("Minimum possible test MSE"),lty=c(2),lwd=2,bty="n")
+
+```  
+
+Something to think about. What do these information tell you about the suitability of each of these models for predicting the IFR by age? What model(s) have comparably low bias and low variance?   
+  
+To answer this question it might be convenient to zoom into the plot above and it might also be interesting to visualize the gap between average test MSE and average train MSE:  
+
+```{r fig.pos="h", fig.height=7, fig.width=10, fig.align="center", include=TRUE, message=FALSE, warning=FALSE}   
+
+gap <- test_MSE-train_MSE
+
+par(fig = c(0,1,0,1), las=1, mai=c(1.4,0.8,0.8,0.4))
+
+plot(1:6,rowMeans(gap),col=c("black","red","forestgreen","magenta","blue","turquoise"),
+pch=19,cex=2,xlab="Model type",ylab="",main="Mean gap between test MSE and train MSE",
+ylim=c(0,5))
+
+lines(1:6,rep(min(gap),6),col="orange",lty=2,lwd=2)
+
+legend(1,5, c("Model 1: Linear model","Model 2: Age term order 2",
+"Model 3: Age term order 3","Model 4: Age term order 4",
+"Model 5: Exponential IFR","Model 6: Exponential IFR and age term order 2"), 
+col=c("black","red","forestgreen","magenta","blue","turquoise"),
+pch=rep(19,6),lty=NA,lwd=2,bty="n")
+
+```  
+
+Given these new information, what do you think: what is the most suitable model (of all six models) in order to predict IFR by age? 
+  
+Something more to think about. Do your findings and conclusions based on the 10-fold cross validation differ from your findings based on the validation set approach (week 6)? What could limitate your findings based on the 10-fold cross validation? Would your findings change if you had done, e.g., a 15-fold cross validation?
+
+## 3. Time for you to think both creatively and critically about selecting the most suitable method for predicting IFR by age based on raw data provided by Levin and colleagues (2020).  
+
+You can consider here the pros and cons of the different procedures adopted to fit and evaluate the models with respect to their ability to accurately predcit IFR by age. For example, what is the actual purpose of a model that has been designed to predict IFR by age? What does it mean when a model is fitted to training data instead of to *all* raw data? And what does it mean when a model's predictions are evaluated using testing data instead of *all* raw data? 
+
+When selecting the most suitable model (among those six models) for predicting the IFR by age, you may also want to consider the theoretical meaning of the models; e.g., to distinguish between M4 and M5?   
+
+
